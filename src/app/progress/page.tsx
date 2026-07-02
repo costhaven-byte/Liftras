@@ -8,7 +8,7 @@ import { Button, Card, IconButton, NumberInput, SectionTitle } from "@/component
 import { useActions, useAppState, todayKey } from "@/lib/store";
 import { displayWeight, lbToKg, weightUnitLabel } from "@/lib/nutrition";
 import { estimate1RM } from "@/lib/training";
-import { exerciseName, resolvedExercises } from "@/lib/derive";
+import { effectiveLoad, exerciseName, resolvedExercises } from "@/lib/derive";
 
 function WeightSection() {
   const state = useAppState();
@@ -125,12 +125,14 @@ function StrengthSection() {
         const sets = w.sets.filter((s) => s.exerciseId === activeId);
         if (!sets.length) return;
         const best = Math.max(
-          ...sets.map((s) => estimate1RM(s.weightKg, s.reps)),
+          ...sets.map((s) =>
+            estimate1RM(effectiveLoad(state, activeId, s.weightKg), s.reps),
+          ),
         );
         perDay.push({ date: w.date, best });
       });
     return perDay;
-  }, [state.workouts, activeId]);
+  }, [state, activeId]);
 
   const points = series.map((s, i) => ({
     x: i,

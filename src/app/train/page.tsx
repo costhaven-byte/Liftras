@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Dumbbell,
   LayoutTemplate,
+  Minus,
   Plus,
   Repeat,
   Trash2,
@@ -29,11 +30,12 @@ import {
 import { useActions, useAppState, todayKey } from "@/lib/store";
 import {
   exerciseGroup,
+  exerciseIsBodyweight,
   exerciseName,
   lastSetsForExercise,
 } from "@/lib/derive";
 import { EFFORT_ZONES, type IntensityMode } from "@/lib/training";
-import { plural } from "@/lib/format";
+import { loadLabel, plural } from "@/lib/format";
 import type { AppState } from "@/lib/types";
 
 function SetLogger({
@@ -51,19 +53,31 @@ function SetLogger({
   const workout = state.workouts.find((w) => w.id === workoutId);
   const sets = workout?.sets.filter((s) => s.exerciseId === exerciseId) ?? [];
   const last = lastSetsForExercise(state, exerciseId, workoutId);
+  const bodyweight = exerciseIsBodyweight(state, exerciseId);
 
   const seed = sets[sets.length - 1] ?? last?.sets[last.sets.length - 1];
-  const [weight, setWeight] = useState(seed ? String(seed.weightKg) : "");
+  // For bodyweight, an added weight of 0 should show as empty (placeholder "BW").
+  const seedWeight =
+    seed && !(bodyweight && seed.weightKg === 0) ? String(seed.weightKg) : "";
+  const [weight, setWeight] = useState(seedWeight);
   const [reps, setReps] = useState(seed ? String(seed.reps) : "");
   const [mode, setMode] = useState<IntensityMode>(seed?.mode ?? "rir");
   const [value, setValue] = useState(seed ? String(seed.value) : "2");
 
-  const valid = +weight >= 0 && +reps > 0 && weight !== "" && reps !== "";
+  const added = weight === "" ? 0 : +weight;
+  const weightValid = bodyweight
+    ? weight === "" || !Number.isNaN(+weight)
+    : weight !== "" && +weight >= 0;
+  const valid = weightValid && reps !== "" && +reps > 0;
+
+  function bump(delta: number) {
+    setValue((v) => String(Math.max(0, Math.min(10, (+v || 0) + delta))));
+  }
 
   function log() {
     addSet(workoutId, {
       exerciseId,
-      weightKg: +weight,
+      weightKg: bodyweight ? added : +weight,
       reps: +reps,
       mode,
       value: +value || 0,
@@ -73,16 +87,28 @@ function SetLogger({
 
   return (
     <Card className="!p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="font-semibold">{exerciseName(state, exerciseId)}</p>
-        <span className="text-xs text-muted">
-          {exerciseGroup(state, exerciseId)}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate font-semibold">
+          {exerciseName(state, exerciseId)}
+        </p>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {bodyweight && (
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[0.65rem] font-semibold text-ink-soft">
+              Bodyweight
+            </span>
+          )}
+          <span className="text-xs text-muted">
+            {exerciseGroup(state, exerciseId)}
+          </span>
         </span>
       </div>
 
       {last && (
         <p className="mb-2 text-xs text-muted">
-          Last time: {last.sets.map((s) => `${s.weightKg}×${s.reps}`).join(", ")}
+          Last time:{" "}
+          {last.sets
+            .map((s) => `${loadLabel(s.weightKg, bodyweight)}×${s.reps}`)
+            .join(", ")}
         </p>
       )}
 
@@ -95,7 +121,9 @@ function SetLogger({
             >
               <span className="tnum">
                 <span className="mr-2 text-muted">{i + 1}</span>
-                <span className="font-semibold">{s.weightKg}</span>
+                <span className="font-semibold">
+                  {loadLabel(s.weightKg, bodyweight)}
+                </span>
                 <span className="text-muted"> × </span>
                 <span className="font-semibold">{s.reps}</span>
               </span>
@@ -117,15 +145,37 @@ function SetLogger({
         </ul>
       )}
 
+      {bodyweight && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {[0, 5, 10, 20].map((kg) => {
+            const activeChip = added === kg && (kg !== 0 || weight === "");
+            return (
+              <button
+                key={kg}
+                type="button"
+                onClick={() => setWeight(kg === 0 ? "" : String(kg))}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  activeChip
+                    ? "bg-primary text-primary-ink"
+                    : "bg-surface-2 text-ink-soft hover:text-ink"
+                }`}
+              >
+                {kg === 0 ? "BW" : `+${kg}`}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
         <label className="block">
           <span className="mb-1 block text-xs text-muted">
-            Weight ({state.profile.units === "metric" ? "kg" : "kg*"})
+            {bodyweight ? "Added weight" : "Weight"} (kg)
           </span>
           <NumberInput
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            placeholder="0"
+            placeholder={bodyweight ? "BW" : "0"}
           />
         </label>
         <label className="block">
@@ -146,24 +196,46 @@ function SetLogger({
         </Button>
       </div>
 
-      <div className="mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
-        <Segmented
-          value={mode}
-          onChange={(m) => setMode(m as IntensityMode)}
-          options={[
-            { value: "rpe", label: "RPE" },
-            { value: "rir", label: "RIR" },
-          ]}
-        />
-        <NumberInput
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="!h-9 !w-16 text-center"
-        />
+      {bodyweight && (
+        <p className="mt-1.5 text-[0.7rem] text-muted">
+          Leave blank for pure bodyweight · use a negative number if assisted.
+        </p>
+      )}
+
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex-1">
+          <Segmented
+            value={mode}
+            onChange={(m) => setMode(m as IntensityMode)}
+            options={[
+              { value: "rpe", label: "RPE" },
+              { value: "rir", label: "RIR" },
+            ]}
+          />
+        </div>
+        <div className="flex items-center gap-1 rounded-md bg-surface-2 p-1">
+          <IconButton
+            label="Decrease effort"
+            className="!h-7 !w-7"
+            onClick={() => bump(-1)}
+          >
+            <Minus size={14} />
+          </IconButton>
+          <span className="tnum w-6 text-center text-sm font-semibold">
+            {value || 0}
+          </span>
+          <IconButton
+            label="Increase effort"
+            className="!h-7 !w-7"
+            onClick={() => bump(1)}
+          >
+            <Plus size={14} />
+          </IconButton>
+        </div>
       </div>
       <p className="mt-1.5 text-[0.7rem] text-muted">
-        Suggested: {mode.toUpperCase()} for {reps && +reps <= 5 ? "heavy" : "these"}{" "}
-        reps · {EFFORT_ZONES.hypertrophy.label.toLowerCase()}{" "}
+        {mode.toUpperCase()} · {mode === "rir" ? "reps left in the tank" : "effort out of 10"}{" "}
+        · aim {EFFORT_ZONES.hypertrophy.label.toLowerCase()}{" "}
         {mode === "rpe" ? EFFORT_ZONES.hypertrophy.rpe : EFFORT_ZONES.hypertrophy.rir}
       </p>
     </Card>

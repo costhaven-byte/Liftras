@@ -28,6 +28,11 @@ export interface WeighIn {
 export interface SetEntry {
   id: string;
   exerciseId: string;
+  /**
+   * For weighted movements: the external load lifted.
+   * For bodyweight movements: ADDED weight only — 0 means pure bodyweight,
+   * negative means assisted (band/machine).
+   */
   weightKg: number;
   reps: number;
   mode: IntensityMode;
@@ -72,6 +77,7 @@ export interface CustomExercise {
   id: string;
   name: string;
   group: string;
+  bodyweight?: boolean; // logs added weight instead of external load
 }
 
 export interface AppState {

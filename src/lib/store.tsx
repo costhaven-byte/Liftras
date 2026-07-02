@@ -411,8 +411,8 @@ function createStore() {
     },
 
     // ------- custom exercises -------
-    addCustomExercise(name: string, group: string): string {
-      const c: CustomExercise = { id: uid(), name, group };
+    addCustomExercise(name: string, group: string, bodyweight = false): string {
+      const c: CustomExercise = { id: uid(), name, group, bodyweight };
       setState({ ...state, customExercises: [...state.customExercises, c] });
       const sb = supabase;
       if (sb && userId)

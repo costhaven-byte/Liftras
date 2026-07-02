@@ -8,19 +8,39 @@ export type MuscleGroup =
   | "Arms"
   | "Core";
 
+/**
+ * How the movement is loaded:
+ * - "weighted": external load on a bar/machine/dumbbell (the number you enter IS the load).
+ * - "bodyweight": you are the load. The number you enter is ADDED weight
+ *   (0 = pure bodyweight, positive = belt/plate, negative = band/machine assistance).
+ */
+export type LoadType = "weighted" | "bodyweight";
+
 export interface Exercise {
   id: string;
   name: string;
   group: MuscleGroup;
   compound: boolean;
+  load: LoadType;
 }
 
-const x = (id: string, name: string, group: MuscleGroup, compound = false): Exercise => ({
+const x = (
+  id: string,
+  name: string,
+  group: MuscleGroup,
+  compound = false,
+  load: LoadType = "weighted",
+): Exercise => ({
   id,
   name,
   group,
   compound,
+  load,
 });
+
+/** Same as `x` but flags the movement as bodyweight-loaded. */
+const bw = (id: string, name: string, group: MuscleGroup, compound = false): Exercise =>
+  x(id, name, group, compound, "bodyweight");
 
 export const EXERCISES: Exercise[] = [
   // Chest
@@ -30,11 +50,11 @@ export const EXERCISES: Exercise[] = [
   x("incline-db-press", "Incline Dumbbell Press", "Chest", true),
   x("cable-fly", "Cable Fly", "Chest"),
   x("pec-deck", "Pec Deck", "Chest"),
-  x("dips", "Chest Dips", "Chest", true),
+  bw("dips", "Chest Dips", "Chest", true),
 
   // Back
   x("deadlift", "Deadlift", "Back", true),
-  x("pull-up", "Pull-up", "Back", true),
+  bw("pull-up", "Pull-up", "Back", true),
   x("barbell-row", "Barbell Row", "Back", true),
   x("lat-pulldown", "Lat Pulldown", "Back", true),
   x("seated-row", "Seated Cable Row", "Back", true),
@@ -71,9 +91,9 @@ export const EXERCISES: Exercise[] = [
   x("overhead-triceps", "Overhead Triceps Extension", "Arms"),
 
   // Core
-  x("hanging-leg-raise", "Hanging Leg Raise", "Core"),
+  bw("hanging-leg-raise", "Hanging Leg Raise", "Core"),
   x("cable-crunch", "Cable Crunch", "Core"),
-  x("plank", "Plank", "Core"),
+  bw("plank", "Plank", "Core"),
 ];
 
 export const MUSCLE_GROUPS: MuscleGroup[] = [

@@ -8,6 +8,7 @@ export interface ResolvedExercise {
   group: string;
   compound: boolean;
   custom: boolean;
+  bodyweight: boolean;
 }
 
 /** Seeded library + the user's custom exercises, unified. */
@@ -18,6 +19,7 @@ export function resolvedExercises(state: AppState): ResolvedExercise[] {
     group: e.group as string,
     compound: e.compound,
     custom: false,
+    bodyweight: e.load === "bodyweight",
   }));
   const custom = state.customExercises.map((c) => ({
     id: c.id,
@@ -25,8 +27,36 @@ export function resolvedExercises(state: AppState): ResolvedExercise[] {
     group: c.group,
     compound: false,
     custom: true,
+    bodyweight: !!c.bodyweight,
   }));
   return [...base, ...custom];
+}
+
+/** Whether a movement is loaded by bodyweight (seeded or custom). */
+export function exerciseIsBodyweight(state: AppState, id: string): boolean {
+  const c = state.customExercises.find((x) => x.id === id);
+  if (c) return !!c.bodyweight;
+  return exerciseById(id)?.load === "bodyweight";
+}
+
+/** Latest known bodyweight — most recent weigh-in, else the profile value. */
+export function currentBodyweightKg(state: AppState): number {
+  const last = state.weighIns[state.weighIns.length - 1];
+  return last?.weightKg ?? state.profile.weightKg;
+}
+
+/**
+ * True load moved for a set. For bodyweight movements this is
+ * bodyweight + added weight, so pull-ups etc. show real strength trends.
+ */
+export function effectiveLoad(
+  state: AppState,
+  exerciseId: string,
+  addedKg: number,
+): number {
+  return exerciseIsBodyweight(state, exerciseId)
+    ? currentBodyweightKg(state) + addedKg
+    : addedKg;
 }
 
 /** Resolve an exercise id (seeded or custom) to a display name. */

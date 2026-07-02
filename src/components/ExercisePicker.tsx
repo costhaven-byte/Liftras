@@ -25,6 +25,7 @@ export function ExercisePicker({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState<MuscleGroup>("Chest");
+  const [newBodyweight, setNewBodyweight] = useState(false);
 
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
@@ -36,6 +37,7 @@ export function ExercisePicker({
     setQuery("");
     setCreating(false);
     setNewName("");
+    setNewBodyweight(false);
   }
 
   function pick(id: string) {
@@ -47,7 +49,7 @@ export function ExercisePicker({
   function create() {
     const name = newName.trim();
     if (!name) return;
-    const id = addCustomExercise(name, newGroup);
+    const id = addCustomExercise(name, newGroup, newBodyweight);
     pick(id);
   }
 
@@ -87,6 +89,22 @@ export function ExercisePicker({
                 </button>
               ))}
             </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-ink-soft">Load type</p>
+            <Segmented
+              value={newBodyweight ? "bodyweight" : "weighted"}
+              onChange={(v) => setNewBodyweight(v === "bodyweight")}
+              options={[
+                { value: "weighted", label: "Weighted" },
+                { value: "bodyweight", label: "Bodyweight" },
+              ]}
+            />
+            <p className="mt-1.5 text-xs text-muted">
+              {newBodyweight
+                ? "Logs added weight only — 0 means just bodyweight."
+                : "Logs the external weight you lift."}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -158,17 +176,24 @@ export function ExercisePicker({
                   <span className="ml-2 text-xs text-muted">{e.group}</span>
                 )}
               </span>
-              {e.custom ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[0.65rem] font-semibold text-accent-ink">
-                  <Sparkles size={11} /> Custom
-                </span>
-              ) : (
-                e.compound && (
-                  <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[0.65rem] font-semibold text-primary">
-                    Compound
+              <span className="flex shrink-0 items-center gap-1.5">
+                {e.bodyweight && (
+                  <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[0.65rem] font-semibold text-ink-soft">
+                    Bodyweight
                   </span>
-                )
-              )}
+                )}
+                {e.custom ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[0.65rem] font-semibold text-accent-ink">
+                    <Sparkles size={11} /> Custom
+                  </span>
+                ) : (
+                  e.compound && (
+                    <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[0.65rem] font-semibold text-primary">
+                      Compound
+                    </span>
+                  )
+                )}
+              </span>
             </button>
           </li>
         ))}

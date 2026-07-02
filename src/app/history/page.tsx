@@ -6,10 +6,14 @@ import { ChevronDown, ChevronLeft, Dumbbell, Trash2 } from "lucide-react";
 import { AppGate } from "@/components/AppGate";
 import { Card } from "@/components/ui";
 import { useActions, useAppState } from "@/lib/store";
-import { exerciseName } from "@/lib/derive";
+import {
+  effectiveLoad,
+  exerciseIsBodyweight,
+  exerciseName,
+} from "@/lib/derive";
 import { estimate1RM } from "@/lib/training";
 import { weightUnitLabel } from "@/lib/nutrition";
-import { plural } from "@/lib/format";
+import { loadLabel, plural } from "@/lib/format";
 import type { Workout } from "@/lib/types";
 
 function WorkoutCard({ w }: { w: Workout }) {
@@ -28,7 +32,10 @@ function WorkoutCard({ w }: { w: Workout }) {
     return [...map.entries()];
   }, [w.sets]);
 
-  const volume = w.sets.reduce((a, s) => a + s.weightKg * s.reps, 0);
+  const volume = w.sets.reduce(
+    (a, s) => a + effectiveLoad(state, s.exerciseId, s.weightKg) * s.reps,
+    0,
+  );
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -61,8 +68,11 @@ function WorkoutCard({ w }: { w: Workout }) {
         <div className="border-t border-border px-4 py-3">
           <div className="space-y-4">
             {byExercise.map(([exId, sets]) => {
+              const bodyweight = exerciseIsBodyweight(state, exId);
               const best = Math.max(
-                ...sets.map((s) => estimate1RM(s.weightKg, s.reps)),
+                ...sets.map((s) =>
+                  estimate1RM(effectiveLoad(state, exId, s.weightKg), s.reps),
+                ),
               );
               return (
                 <div key={exId}>
@@ -82,7 +92,9 @@ function WorkoutCard({ w }: { w: Workout }) {
                       >
                         <span>
                           <span className="mr-2 text-muted">{i + 1}</span>
-                          <span className="font-semibold">{s.weightKg}</span>
+                          <span className="font-semibold">
+                            {loadLabel(s.weightKg, bodyweight)}
+                          </span>
                           <span className="text-muted"> × </span>
                           <span className="font-semibold">{s.reps}</span>
                         </span>
