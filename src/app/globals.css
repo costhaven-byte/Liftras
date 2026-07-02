@@ -1,26 +1,152 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `dark:` utilities activate when <html> has .dark */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * Design tokens — purple, committed. True-white surfaces in light,
+ * violet-tinted near-black in dark. Ink stays high-contrast (never
+ * gray-on-tint body text). One warm amber accent, reserved for PRs
+ * and streaks. Macro roles get four distinct, legible hues.
+ * ------------------------------------------------------------------ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: oklch(0.985 0.004 300);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.968 0.006 300);
+  --border: oklch(0.9 0.008 300);
+  --border-strong: oklch(0.83 0.012 300);
+  --ink: oklch(0.22 0.02 293);
+  --ink-soft: oklch(0.4 0.02 293);
+  --muted: oklch(0.47 0.02 293);
+
+  --primary: oklch(0.48 0.2 293);
+  --primary-hover: oklch(0.43 0.2 293);
+  --primary-soft: oklch(0.95 0.03 293);
+  --primary-ink: oklch(0.99 0.005 300);
+
+  --accent: oklch(0.78 0.16 72);
+  --accent-ink: oklch(0.28 0.06 72);
+
+  --success: oklch(0.62 0.15 150);
+  --danger: oklch(0.58 0.2 25);
+
+  /* macro roles */
+  --kcal: oklch(0.48 0.2 293);
+  --protein: oklch(0.62 0.14 200);
+  --carbs: oklch(0.74 0.15 70);
+  --fat: oklch(0.66 0.16 12);
+
+  --radius: 0.9rem;
+  --radius-sm: 0.55rem;
+  --shadow-sm: 0 1px 2px oklch(0.3 0.05 293 / 0.06);
+  --shadow-md: 0 6px 20px -6px oklch(0.3 0.08 293 / 0.18);
+  --shadow-lg: 0 16px 40px -12px oklch(0.3 0.1 293 / 0.28);
+}
+
+.dark {
+  --bg: oklch(0.17 0.018 293);
+  --surface: oklch(0.21 0.022 293);
+  --surface-2: oklch(0.25 0.026 293);
+  --border: oklch(0.31 0.024 293);
+  --border-strong: oklch(0.4 0.03 293);
+  --ink: oklch(0.96 0.01 300);
+  --ink-soft: oklch(0.82 0.014 300);
+  --muted: oklch(0.66 0.02 293);
+
+  --primary: oklch(0.68 0.18 293);
+  --primary-hover: oklch(0.74 0.17 293);
+  --primary-soft: oklch(0.3 0.06 293);
+  --primary-ink: oklch(0.16 0.02 293);
+
+  --accent: oklch(0.82 0.15 74);
+  --accent-ink: oklch(0.24 0.06 74);
+
+  --success: oklch(0.72 0.15 150);
+  --danger: oklch(0.68 0.18 25);
+
+  --kcal: oklch(0.68 0.18 293);
+  --protein: oklch(0.7 0.13 200);
+  --carbs: oklch(0.8 0.14 74);
+  --fat: oklch(0.72 0.15 14);
+
+  --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-md: 0 6px 20px -6px oklch(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 40px -12px oklch(0 0 0 / 0.6);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-ink: var(--primary-ink);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-kcal: var(--kcal);
+  --color-protein: var(--protein);
+  --color-carbs: var(--carbs);
+  --color-fat: var(--fat);
+
+  --radius-lg: var(--radius);
+  --radius-md: var(--radius-sm);
+
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Numbers (weights, reps, calories) read better tabular */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Shared keyboard focus ring — applied to links, icon buttons, tabs. */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
