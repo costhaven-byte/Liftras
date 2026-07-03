@@ -293,6 +293,7 @@ function TrainContent() {
   const lastWorkout = state.workouts.find((w) => w.sets.length > 0);
 
   const [localAdded, setLocalAdded] = useState<string[]>([]);
+  const [finished, setFinished] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [restRun, setRestRun] = useState(0);
@@ -309,10 +310,11 @@ function TrainContent() {
   function begin(exerciseSeed: string[] = []) {
     startWorkout(today, new Date().toISOString());
     setLocalAdded(exerciseSeed);
+    setFinished(false);
   }
 
   // ---- Start screen ----
-  if (!todayWorkout) {
+  if (!todayWorkout || finished) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Train</h1>
@@ -495,7 +497,10 @@ function TrainContent() {
         <Button
           size="lg"
           variant="ghost"
-          onClick={() => setLocalAdded([])}
+          onClick={() => {
+            setLocalAdded([]);
+            setFinished(true);
+          }}
           className="!text-success"
         >
           <Check size={18} /> Finish workout
