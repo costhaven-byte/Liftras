@@ -281,23 +281,24 @@ function SaveTemplateSheet({
   );
 }
 
-const FINISHED_KEY = "lift:finishedWorkouts";
+const ACTIVE_KEY = "lift:activeWorkout";
 
-function readFinished(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+function readActive(): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    return new Set(JSON.parse(localStorage.getItem(FINISHED_KEY) || "[]"));
+    return localStorage.getItem(ACTIVE_KEY);
   } catch {
-    return new Set();
+    return null;
   }
 }
 
-function writeFinished(ids: Set<string>) {
+function writeActive(id: string | null) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(FINISHED_KEY, JSON.stringify([...ids]));
+    if (id) localStorage.setItem(ACTIVE_KEY, id);
+    else localStorage.removeItem(ACTIVE_KEY);
   } catch {
-    /* storage full / unavailable — non-fatal */
+    /* storage unavailable — non-fatal */
   }
 }
 
@@ -313,7 +314,7 @@ function TrainContent() {
   const lastWorkout = state.workouts.find((w) => w.sets.length > 0);
 
   const [localAdded, setLocalAdded] = useState<string[]>([]);
-  const [finishedIds, setFinishedIds] = useState<Set<string>>(readFinished);
+  const [activeId, setActiveId] = useState<string | null>(readActive);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [restRun, setRestRun] = useState(0);
@@ -327,15 +328,26 @@ function TrainContent() {
     return merged;
   }, [todayWorkout, localAdded]);
 
-  const isFinished = !!todayWorkout && finishedIds.has(todayWorkout.id);
+  // A session is "active" only if we explicitly started it and haven't
+  // finished it — not merely because a workout row is dated today.
+  const activeWorkout =
+    todayWorkout && todayWorkout.id === activeId ? todayWorkout : null;
 
   function begin(exerciseSeed: string[] = []) {
-    startWorkout(today, new Date().toISOString());
+    const id = startWorkout(today, new Date().toISOString());
+    setActiveId(id);
+    writeActive(id);
     setLocalAdded(exerciseSeed);
   }
 
+  function finish() {
+    writeActive(null);
+    setActiveId(null);
+    setLocalAdded([]);
+  }
+
   // ---- Start screen ----
-  if (!todayWorkout || isFinished) {
+  if (!activeWorkout) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Train</h1>
@@ -458,7 +470,7 @@ function TrainContent() {
   }
 
   // ---- Active workout ----
-  const totalSets = todayWorkout.sets.length;
+  const totalSets = activeWorkout.sets.length;
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -470,15 +482,15 @@ function TrainContent() {
         </div>
         <button
           onClick={() => {
-            if (todayWorkout.sets.length === 0) {
-              deleteWorkout(todayWorkout.id);
-              setLocalAdded([]);
+            if (activeWorkout.sets.length === 0) {
+              deleteWorkout(activeWorkout.id);
+              finish();
             }
           }}
           className="text-sm text-muted disabled:opacity-40"
-          disabled={todayWorkout.sets.length > 0}
+          disabled={activeWorkout.sets.length > 0}
         >
-          {todayWorkout.sets.length === 0 ? "Cancel" : ""}
+          {activeWorkout.sets.length === 0 ? "Cancel" : ""}
         </button>
       </div>
 
@@ -492,7 +504,7 @@ function TrainContent() {
         {exerciseIds.map((id) => (
           <SetLogger
             key={id}
-            workoutId={todayWorkout.id}
+            workoutId={activeWorkout.id}
             exerciseId={id}
             state={state}
             onLogged={() => setRestRun((n) => n + 1)}
@@ -518,12 +530,7 @@ function TrainContent() {
         <Button
           size="lg"
           variant="ghost"
-          onClick={() => {
-            const next = new Set(finishedIds).add(todayWorkout.id);
-            setFinishedIds(next);
-            writeFinished(next);
-            setLocalAdded([]);
-          }}
+          onClick={finish}
           className="!text-success"
         >
           <Check size={18} /> Finish workout
