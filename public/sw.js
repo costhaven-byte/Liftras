@@ -2,7 +2,7 @@
 // Data (Supabase) always goes to the network; the shell + static assets are
 // cached so the app opens instantly and works offline for browsing.
 
-const CACHE = "lift-v1";
+const CACHE = "lift-v2";
 const SHELL = [
   "/",
   "/nutrition",
