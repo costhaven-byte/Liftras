@@ -281,6 +281,26 @@ function SaveTemplateSheet({
   );
 }
 
+const FINISHED_KEY = "lift:finishedWorkouts";
+
+function readFinished(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    return new Set(JSON.parse(localStorage.getItem(FINISHED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeFinished(ids: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FINISHED_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* storage full / unavailable — non-fatal */
+  }
+}
+
 function TrainContent() {
   const state = useAppState();
   const { startWorkout, deleteWorkout, deleteTemplate } = useActions();
@@ -293,7 +313,7 @@ function TrainContent() {
   const lastWorkout = state.workouts.find((w) => w.sets.length > 0);
 
   const [localAdded, setLocalAdded] = useState<string[]>([]);
-  const [finished, setFinished] = useState(false);
+  const [finishedIds, setFinishedIds] = useState<Set<string>>(readFinished);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [restRun, setRestRun] = useState(0);
@@ -307,14 +327,15 @@ function TrainContent() {
     return merged;
   }, [todayWorkout, localAdded]);
 
+  const isFinished = !!todayWorkout && finishedIds.has(todayWorkout.id);
+
   function begin(exerciseSeed: string[] = []) {
     startWorkout(today, new Date().toISOString());
     setLocalAdded(exerciseSeed);
-    setFinished(false);
   }
 
   // ---- Start screen ----
-  if (!todayWorkout || finished) {
+  if (!todayWorkout || isFinished) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight">Train</h1>
@@ -498,8 +519,10 @@ function TrainContent() {
           size="lg"
           variant="ghost"
           onClick={() => {
+            const next = new Set(finishedIds).add(todayWorkout.id);
+            setFinishedIds(next);
+            writeFinished(next);
             setLocalAdded([]);
-            setFinished(true);
           }}
           className="!text-success"
         >
