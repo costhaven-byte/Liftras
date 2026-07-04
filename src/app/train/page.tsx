@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BookmarkPlus,
@@ -9,14 +9,18 @@ import {
   Dumbbell,
   LayoutTemplate,
   Minus,
+  Pause,
+  Play,
   Plus,
   Repeat,
+  RotateCcw,
   Trash2,
   X,
 } from "lucide-react";
 import { AppGate } from "@/components/AppGate";
 import { ExercisePicker } from "@/components/ExercisePicker";
 import { RestTimer } from "@/components/RestTimer";
+import { WorkoutSummary } from "@/components/WorkoutSummary";
 import {
   Button,
   Card,
@@ -29,14 +33,78 @@ import {
 } from "@/components/ui";
 import { useActions, useAppState, todayKey } from "@/lib/store";
 import {
+  exerciseDefaultSec,
   exerciseGroup,
-  exerciseIsBodyweight,
+  exerciseMetric,
   exerciseName,
   lastSetsForExercise,
 } from "@/lib/derive";
-import { EFFORT_ZONES, type IntensityMode } from "@/lib/training";
-import { loadLabel, plural } from "@/lib/format";
+import { BAND_LEVELS, EFFORT_ZONES, type IntensityMode } from "@/lib/training";
+import { mmss, plural, setDetail, setLabel } from "@/lib/format";
 import type { AppState } from "@/lib/types";
+
+/**
+ * Inline countdown for timed movements. Vibrates when it reaches zero.
+ * Re-key from the parent (`key={targetSec}`) to re-arm when the target changes.
+ */
+function HoldTimer({ targetSec }: { targetSec: number }) {
+  const [remaining, setRemaining] = useState(targetSec);
+  const [running, setRunning] = useState(false);
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) {
+          clearInterval(id);
+          setRunning(false);
+          if (!firedRef.current) {
+            firedRef.current = true;
+            try {
+              navigator.vibrate?.([120, 60, 120]);
+            } catch {}
+          }
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  return (
+    <div className="mb-2 flex items-center gap-3 rounded-md bg-surface-2 px-3 py-2">
+      <span className="tnum text-2xl font-bold tabular-nums">
+        {mmss(remaining)}
+      </span>
+      <div className="ml-auto flex items-center gap-1">
+        <IconButton
+          label={running ? "Pause hold" : "Start hold"}
+          className="!h-9 !w-9"
+          onClick={() => {
+            if (!running && remaining === 0) setRemaining(targetSec);
+            setRunning((v) => !v);
+            firedRef.current = false;
+          }}
+        >
+          {running ? <Pause size={16} /> : <Play size={16} />}
+        </IconButton>
+        <IconButton
+          label="Reset hold"
+          className="!h-9 !w-9"
+          onClick={() => {
+            setRunning(false);
+            setRemaining(targetSec);
+            firedRef.current = false;
+          }}
+        >
+          <RotateCcw size={16} />
+        </IconButton>
+      </div>
+    </div>
+  );
+}
 
 function SetLogger({
   workoutId,
@@ -53,37 +121,71 @@ function SetLogger({
   const workout = state.workouts.find((w) => w.id === workoutId);
   const sets = workout?.sets.filter((s) => s.exerciseId === exerciseId) ?? [];
   const last = lastSetsForExercise(state, exerciseId, workoutId);
-  const bodyweight = exerciseIsBodyweight(state, exerciseId);
+  const metric = exerciseMetric(state, exerciseId);
+  const bodyweight = metric === "bodyweight";
+  const isBand = metric === "band";
+  const isTimed = metric === "time";
 
   const seed = sets[sets.length - 1] ?? last?.sets[last.sets.length - 1];
   // For bodyweight, an added weight of 0 should show as empty (placeholder "BW").
   const seedWeight =
     seed && !(bodyweight && seed.weightKg === 0) ? String(seed.weightKg) : "";
   const [weight, setWeight] = useState(seedWeight);
-  const [reps, setReps] = useState(seed ? String(seed.reps) : "");
+  const [reps, setReps] = useState(seed && seed.reps > 0 ? String(seed.reps) : "");
   const [mode, setMode] = useState<IntensityMode>(seed?.mode ?? "rir");
   const [value, setValue] = useState(seed ? String(seed.value) : "2");
+  const [level, setLevel] = useState<string>(seed?.band ?? "Medium");
+  const [dur, setDur] = useState(
+    String(seed?.durationSec ?? exerciseDefaultSec(state, exerciseId)),
+  );
 
   const added = weight === "" ? 0 : +weight;
   const weightValid = bodyweight
     ? weight === "" || !Number.isNaN(+weight)
     : weight !== "" && +weight >= 0;
-  const valid = weightValid && reps !== "" && +reps > 0;
+
+  const valid = isTimed
+    ? dur !== "" && +dur > 0
+    : isBand
+      ? reps !== "" && +reps > 0
+      : weightValid && reps !== "" && +reps > 0;
 
   function bump(delta: number) {
     setValue((v) => String(Math.max(0, Math.min(10, (+v || 0) + delta))));
   }
 
   function log() {
-    addSet(workoutId, {
-      exerciseId,
-      weightKg: bodyweight ? added : +weight,
-      reps: +reps,
-      mode,
-      value: +value || 0,
-    });
+    if (isTimed) {
+      addSet(workoutId, {
+        exerciseId,
+        weightKg: 0,
+        reps: 0,
+        mode,
+        value: 0,
+        durationSec: +dur,
+      });
+    } else if (isBand) {
+      addSet(workoutId, {
+        exerciseId,
+        weightKg: 0,
+        reps: +reps,
+        mode,
+        value: +value || 0,
+        band: level,
+      });
+    } else {
+      addSet(workoutId, {
+        exerciseId,
+        weightKg: bodyweight ? added : +weight,
+        reps: +reps,
+        mode,
+        value: +value || 0,
+      });
+    }
     onLogged();
   }
+
+  const tag = isBand ? "Band" : isTimed ? "Timed" : bodyweight ? "Bodyweight" : null;
 
   return (
     <Card className="!p-4">
@@ -92,9 +194,9 @@ function SetLogger({
           {exerciseName(state, exerciseId)}
         </p>
         <span className="flex shrink-0 items-center gap-1.5">
-          {bodyweight && (
+          {tag && (
             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[0.65rem] font-semibold text-ink-soft">
-              Bodyweight
+              {tag}
             </span>
           )}
           <span className="text-xs text-muted">
@@ -107,7 +209,11 @@ function SetLogger({
         <p className="mb-2 text-xs text-muted">
           Last time:{" "}
           {last.sets
-            .map((s) => `${loadLabel(s.weightKg, bodyweight)}×${s.reps}`)
+            .map((s) => {
+              const l = setLabel(s, metric);
+              const d = setDetail(s, metric);
+              return d ? `${l}${d.replace("× ", "×")}` : l;
+            })
             .join(", ")}
         </p>
       )}
@@ -121,16 +227,20 @@ function SetLogger({
             >
               <span className="tnum">
                 <span className="mr-2 text-muted">{i + 1}</span>
-                <span className="font-semibold">
-                  {loadLabel(s.weightKg, bodyweight)}
-                </span>
-                <span className="text-muted"> × </span>
-                <span className="font-semibold">{s.reps}</span>
+                <span className="font-semibold">{setLabel(s, metric)}</span>
+                {setDetail(s, metric) && (
+                  <>
+                    <span className="text-muted"> × </span>
+                    <span className="font-semibold">{s.reps}</span>
+                  </>
+                )}
               </span>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase">
-                  {s.mode} {s.value}
-                </span>
+                {!isTimed && (
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium uppercase">
+                    {s.mode} {s.value}
+                  </span>
+                )}
                 <IconButton
                   label={`Delete set ${i + 1}`}
                   tone="danger"
@@ -145,99 +255,160 @@ function SetLogger({
         </ul>
       )}
 
-      {bodyweight && (
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          {[0, 5, 10, 20].map((kg) => {
-            const activeChip = added === kg && (kg !== 0 || weight === "");
-            return (
-              <button
-                key={kg}
-                type="button"
-                onClick={() => setWeight(kg === 0 ? "" : String(kg))}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                  activeChip
-                    ? "bg-primary text-primary-ink"
-                    : "bg-surface-2 text-ink-soft hover:text-ink"
-                }`}
+      {/* ---- Timed movement ---- */}
+      {isTimed ? (
+        <>
+          <HoldTimer key={+dur || 0} targetSec={Math.max(1, +dur || 0)} />
+          <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+            <label className="block">
+              <span className="mb-1 block text-xs text-muted">Hold (seconds)</span>
+              <NumberInput
+                value={dur}
+                onChange={(e) => setDur(e.target.value)}
+                placeholder="30"
+              />
+            </label>
+            <Button
+              onClick={log}
+              disabled={!valid}
+              className="!h-11 !w-11 !px-0"
+              aria-label="Log hold"
+            >
+              <Check size={20} />
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[0.7rem] text-muted">
+            Start the timer to hold, then log the seconds you held.
+          </p>
+        </>
+      ) : (
+        <>
+          {bodyweight && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {[0, 5, 10, 20].map((kg) => {
+                const activeChip = added === kg && (kg !== 0 || weight === "");
+                return (
+                  <button
+                    key={kg}
+                    type="button"
+                    onClick={() => setWeight(kg === 0 ? "" : String(kg))}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                      activeChip
+                        ? "bg-primary text-primary-ink"
+                        : "bg-surface-2 text-ink-soft hover:text-ink"
+                    }`}
+                  >
+                    {kg === 0 ? "BW" : `+${kg}`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {isBand && (
+            <div className="mb-2 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+              {BAND_LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setLevel(lvl)}
+                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                    lvl === level
+                      ? "bg-primary text-primary-ink"
+                      : "bg-surface-2 text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+            {isBand ? (
+              <div className="block">
+                <span className="mb-1 block text-xs text-muted">Resistance</span>
+                <div className="flex h-11 items-center rounded-md border border-border bg-surface px-3.5 text-sm font-semibold">
+                  {level}
+                </div>
+              </div>
+            ) : (
+              <label className="block">
+                <span className="mb-1 block text-xs text-muted">
+                  {bodyweight ? "Added weight" : "Weight"} (kg)
+                </span>
+                <NumberInput
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                  placeholder={bodyweight ? "BW" : "0"}
+                />
+              </label>
+            )}
+            <label className="block">
+              <span className="mb-1 block text-xs text-muted">Reps</span>
+              <NumberInput
+                value={reps}
+                onChange={(e) => setReps(e.target.value)}
+                placeholder="0"
+              />
+            </label>
+            <Button
+              onClick={log}
+              disabled={!valid}
+              className="!h-11 !w-11 !px-0"
+              aria-label="Log set"
+            >
+              <Check size={20} />
+            </Button>
+          </div>
+
+          {bodyweight && (
+            <p className="mt-1.5 text-[0.7rem] text-muted">
+              Leave blank for pure bodyweight · use a negative number if assisted.
+            </p>
+          )}
+
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex-1">
+              <Segmented
+                value={mode}
+                onChange={(m) => setMode(m as IntensityMode)}
+                options={[
+                  { value: "rpe", label: "RPE" },
+                  { value: "rir", label: "RIR" },
+                ]}
+              />
+            </div>
+            <div className="flex items-center gap-1 rounded-md bg-surface-2 p-1">
+              <IconButton
+                label="Decrease effort"
+                className="!h-7 !w-7"
+                onClick={() => bump(-1)}
               >
-                {kg === 0 ? "BW" : `+${kg}`}
-              </button>
-            );
-          })}
-        </div>
+                <Minus size={14} />
+              </IconButton>
+              <span className="tnum w-6 text-center text-sm font-semibold">
+                {value || 0}
+              </span>
+              <IconButton
+                label="Increase effort"
+                className="!h-7 !w-7"
+                onClick={() => bump(1)}
+              >
+                <Plus size={14} />
+              </IconButton>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[0.7rem] text-muted">
+            {mode.toUpperCase()} ·{" "}
+            {mode === "rir" ? "reps left in the tank" : "effort out of 10"} · aim{" "}
+            {EFFORT_ZONES.hypertrophy.label.toLowerCase()}{" "}
+            {mode === "rpe"
+              ? EFFORT_ZONES.hypertrophy.rpe
+              : EFFORT_ZONES.hypertrophy.rir}
+          </p>
+        </>
       )}
-
-      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-        <label className="block">
-          <span className="mb-1 block text-xs text-muted">
-            {bodyweight ? "Added weight" : "Weight"} (kg)
-          </span>
-          <NumberInput
-            value={weight}
-            onChange={(e) => setWeight(e.target.value)}
-            placeholder={bodyweight ? "BW" : "0"}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-muted">Reps</span>
-          <NumberInput
-            value={reps}
-            onChange={(e) => setReps(e.target.value)}
-            placeholder="0"
-          />
-        </label>
-        <Button
-          onClick={log}
-          disabled={!valid}
-          className="!h-11 !w-11 !px-0"
-          aria-label="Log set"
-        >
-          <Check size={20} />
-        </Button>
-      </div>
-
-      {bodyweight && (
-        <p className="mt-1.5 text-[0.7rem] text-muted">
-          Leave blank for pure bodyweight · use a negative number if assisted.
-        </p>
-      )}
-
-      <div className="mt-3 flex items-center gap-2">
-        <div className="flex-1">
-          <Segmented
-            value={mode}
-            onChange={(m) => setMode(m as IntensityMode)}
-            options={[
-              { value: "rpe", label: "RPE" },
-              { value: "rir", label: "RIR" },
-            ]}
-          />
-        </div>
-        <div className="flex items-center gap-1 rounded-md bg-surface-2 p-1">
-          <IconButton
-            label="Decrease effort"
-            className="!h-7 !w-7"
-            onClick={() => bump(-1)}
-          >
-            <Minus size={14} />
-          </IconButton>
-          <span className="tnum w-6 text-center text-sm font-semibold">
-            {value || 0}
-          </span>
-          <IconButton
-            label="Increase effort"
-            className="!h-7 !w-7"
-            onClick={() => bump(1)}
-          >
-            <Plus size={14} />
-          </IconButton>
-        </div>
-      </div>
-      <p className="mt-1.5 text-[0.7rem] text-muted">
-        {mode.toUpperCase()} · {mode === "rir" ? "reps left in the tank" : "effort out of 10"}{" "}
-        · aim {EFFORT_ZONES.hypertrophy.label.toLowerCase()}{" "}
-        {mode === "rpe" ? EFFORT_ZONES.hypertrophy.rpe : EFFORT_ZONES.hypertrophy.rir}
-      </p>
     </Card>
   );
 }
@@ -318,6 +489,8 @@ function TrainContent() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [restRun, setRestRun] = useState(0);
+  const [summaryId, setSummaryId] = useState<string | null>(null);
+  const seedRan = useRef(false);
 
   const exerciseIds = useMemo(() => {
     const fromSets = todayWorkout
@@ -341,10 +514,61 @@ function TrainContent() {
   }
 
   function finish() {
+    // Snapshot the finished session for a screenshot-friendly summary.
+    if (activeWorkout && activeWorkout.sets.length > 0)
+      setSummaryId(activeWorkout.id);
     writeActive(null);
     setActiveId(null);
     setLocalAdded([]);
   }
+
+  // "Start this day" from the Plan tab drops a seed in sessionStorage.
+  useEffect(() => {
+    if (seedRan.current) return;
+    seedRan.current = true;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("lift:programSeed");
+      if (raw) sessionStorage.removeItem("lift:programSeed");
+    } catch {
+      /* storage unavailable */
+    }
+    if (!raw) return;
+    try {
+      const ids: string[] = JSON.parse(raw);
+      if (!ids.length) return;
+      if (activeWorkout)
+        setLocalAdded((prev) => [...new Set([...prev, ...ids])]);
+      else begin(ids);
+    } catch {
+      /* malformed seed — ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const summaryWorkout = summaryId
+    ? state.workouts.find((w) => w.id === summaryId) ?? null
+    : null;
+
+  const summarySheet = (
+    <Sheet
+      open={!!summaryWorkout}
+      onClose={() => setSummaryId(null)}
+      title="Session complete 💪"
+    >
+      {summaryWorkout && (
+        <>
+          <WorkoutSummary workout={summaryWorkout} live />
+          <p className="mt-3 text-center text-xs text-muted">
+            Screenshot to share 📸
+          </p>
+          <Button className="mt-3" size="lg" onClick={() => setSummaryId(null)}>
+            Done
+          </Button>
+        </>
+      )}
+    </Sheet>
+  );
 
   // ---- Start screen ----
   if (!activeWorkout) {
@@ -465,6 +689,8 @@ function TrainContent() {
             </ul>
           </div>
         )}
+
+        {summarySheet}
       </div>
     );
   }
@@ -550,6 +776,7 @@ function TrainContent() {
         exerciseIds={exerciseIds}
       />
       <RestTimer runId={restRun} seconds={state.profile.restTimerSec} />
+      {summarySheet}
     </div>
   );
 }

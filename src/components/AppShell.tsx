@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarDays,
   Dumbbell,
   Home,
   LineChart,
@@ -15,8 +16,9 @@ import { useTheme } from "@/lib/theme";
 
 const NAV = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/nutrition", label: "Nutrition", icon: UtensilsCrossed },
+  { href: "/nutrition", label: "Food", icon: UtensilsCrossed },
   { href: "/train", label: "Train", icon: Dumbbell },
+  { href: "/plan", label: "Plan", icon: CalendarDays },
   { href: "/progress", label: "Progress", icon: LineChart },
   { href: "/profile", label: "Profile", icon: User },
 ];
@@ -46,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 px-5 pb-28 pt-5">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md border-t border-border bg-bg/90 backdrop-blur-md">
-        <ul className="grid grid-cols-5">
+        <ul className="grid grid-cols-6">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active =
               href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -55,11 +57,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className="focus-ring flex flex-col items-center gap-1 py-2.5 text-[0.68rem] font-medium transition-colors"
+                  className="focus-ring flex flex-col items-center gap-1 py-2.5 text-[0.6rem] font-medium transition-colors"
                   style={{ color: active ? "var(--primary)" : "var(--muted)" }}
                 >
                   <Icon
-                    size={22}
+                    size={20}
                     strokeWidth={active ? 2.5 : 2}
                     fill={active ? "var(--primary-soft)" : "none"}
                   />

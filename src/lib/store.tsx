@@ -16,12 +16,16 @@ import {
   useSyncExternalStore,
 } from "react";
 import { supabase } from "./supabase";
+import type { Metric } from "./exercises";
 import type {
   AppState,
   CustomExercise,
   FoodEntry,
   Meal,
   Profile,
+  Program,
+  ProgramDay,
+  ScheduleEntry,
   SetEntry,
   Template,
   WeighIn,
@@ -49,6 +53,8 @@ const DEFAULT_STATE: AppState = {
   food: [],
   templates: [],
   customExercises: [],
+  programs: [],
+  schedule: [],
 };
 
 export type AuthStatus = "loading" | "signedOut" | "ready";
@@ -107,6 +113,8 @@ const rowToSet = (r: any): SetEntry => ({
   reps: Number(r.reps),
   mode: r.mode,
   value: Number(r.value),
+  durationSec: r.duration_sec != null ? Number(r.duration_sec) : undefined,
+  band: r.band ?? undefined,
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -150,7 +158,7 @@ function createStore() {
       prof = res.data;
     }
 
-    const [weighIns, workouts, sets, meals, food, templates, customEx] =
+    const [weighIns, workouts, sets, meals, food, templates, customEx, programs, schedule] =
       await Promise.all([
         supabase.from("weigh_ins").select("*").order("date"),
         supabase
@@ -162,6 +170,8 @@ function createStore() {
         supabase.from("food_entries").select("*"),
         supabase.from("templates").select("*").order("created_at"),
         supabase.from("custom_exercises").select("*").order("created_at"),
+        supabase.from("programs").select("*").order("created_at"),
+        supabase.from("schedule").select("*").order("date"),
       ]);
 
     const setsByWorkout = new Map<string, SetEntry[]>();
@@ -212,6 +222,19 @@ function createStore() {
         id: r.id,
         name: r.name,
         group: r.muscle_group,
+        metric: (r.metric ?? "weight") as Metric,
+      })),
+      programs: (programs.data ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        days: Array.isArray(r.days) ? (r.days as ProgramDay[]) : [],
+      })),
+      schedule: (schedule.data ?? []).map((r) => ({
+        id: r.id,
+        programId: r.program_id,
+        date: r.date,
+        dayId: r.day_id ?? null,
+        done: !!r.done,
       })),
     };
     setAuth({ status: "ready", userId: uidArg, email: auth.email });
@@ -254,6 +277,37 @@ function createStore() {
     ...row,
     user_id: userId,
   });
+
+  /** Replace the single schedule row for (programId, date). */
+  const upsertSchedule = (next: ScheduleEntry) => {
+    setState({
+      ...state,
+      schedule: [
+        ...state.schedule.filter(
+          (s) => !(s.programId === next.programId && s.date === next.date),
+        ),
+        next,
+      ],
+    });
+    const sb = supabase;
+    if (!sb || !userId) return;
+    write(async () => {
+      await sb
+        .from("schedule")
+        .delete()
+        .eq("program_id", next.programId)
+        .eq("date", next.date);
+      return sb.from("schedule").insert(
+        owned({
+          id: next.id,
+          program_id: next.programId,
+          date: next.date,
+          day_id: next.dayId,
+          done: next.done,
+        }),
+      );
+    });
+  };
 
   return {
     getSnapshot: () => state,
@@ -349,6 +403,8 @@ function createStore() {
             reps: entry.reps,
             mode: entry.mode,
             value: entry.value,
+            duration_sec: entry.durationSec ?? null,
+            band: entry.band ?? null,
           }),
         ),
       );
@@ -411,15 +467,15 @@ function createStore() {
     },
 
     // ------- custom exercises -------
-    addCustomExercise(name: string, group: string, bodyweight = false): string {
-      const c: CustomExercise = { id: uid(), name, group, bodyweight };
+    addCustomExercise(name: string, group: string, metric: Metric = "weight"): string {
+      const c: CustomExercise = { id: uid(), name, group, metric };
       setState({ ...state, customExercises: [...state.customExercises, c] });
       const sb = supabase;
       if (sb && userId)
         write(() =>
           sb
             .from("custom_exercises")
-            .insert(owned({ id: c.id, name, muscle_group: group })),
+            .insert(owned({ id: c.id, name, muscle_group: group, metric })),
         );
       return c.id;
     },
@@ -431,6 +487,71 @@ function createStore() {
       const sb = supabase;
       if (!sb || !userId) return;
       write(() => sb.from("custom_exercises").delete().eq("id", id));
+    },
+
+    // ------- programs -------
+    saveProgram(name: string, days: ProgramDay[]): string {
+      const p: Program = { id: uid(), name, days };
+      setState({ ...state, programs: [...state.programs, p] });
+      const sb = supabase;
+      if (sb && userId)
+        write(() =>
+          sb.from("programs").insert(owned({ id: p.id, name, days })),
+        );
+      return p.id;
+    },
+    updateProgram(id: string, patch: Partial<Omit<Program, "id">>) {
+      setState({
+        ...state,
+        programs: state.programs.map((p) =>
+          p.id === id ? { ...p, ...patch } : p,
+        ),
+      });
+      const sb = supabase;
+      if (!sb || !userId) return;
+      const row: Record<string, unknown> = {};
+      if (patch.name !== undefined) row.name = patch.name;
+      if (patch.days !== undefined) row.days = patch.days;
+      write(() => sb.from("programs").update(row).eq("id", id));
+    },
+    deleteProgram(id: string) {
+      setState({
+        ...state,
+        programs: state.programs.filter((p) => p.id !== id),
+        schedule: state.schedule.filter((s) => s.programId !== id),
+      });
+      const sb = supabase;
+      if (!sb || !userId) return;
+      write(async () => {
+        await sb.from("schedule").delete().eq("program_id", id);
+        return sb.from("programs").delete().eq("id", id);
+      });
+    },
+
+    // ------- schedule (one row per program+date) -------
+    setScheduledDay(programId: string, date: string, dayId: string | null) {
+      const prev = state.schedule.find(
+        (s) => s.programId === programId && s.date === date,
+      );
+      upsertSchedule({
+        id: prev?.id ?? uid(),
+        programId,
+        date,
+        dayId,
+        done: prev?.done ?? false,
+      });
+    },
+    markDayDone(programId: string, date: string, done: boolean) {
+      const prev = state.schedule.find(
+        (s) => s.programId === programId && s.date === date,
+      );
+      upsertSchedule({
+        id: prev?.id ?? uid(),
+        programId,
+        date,
+        dayId: prev?.dayId ?? null,
+        done,
+      });
     },
 
     // ------- meals -------
@@ -501,6 +622,8 @@ function createStore() {
           sb.from("food_entries").delete().eq("user_id", u),
           sb.from("templates").delete().eq("user_id", u),
           sb.from("custom_exercises").delete().eq("user_id", u),
+          sb.from("schedule").delete().eq("user_id", u),
+          sb.from("programs").delete().eq("user_id", u),
         ]);
         return sb
           .from("profiles")

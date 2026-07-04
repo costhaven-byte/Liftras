@@ -2,10 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Search, Sparkles } from "lucide-react";
-import { Button, Input, Segmented, Sheet } from "./ui";
+import { Button, Input, Sheet } from "./ui";
 import { useActions, useAppState } from "@/lib/store";
 import { resolvedExercises } from "@/lib/derive";
-import { MUSCLE_GROUPS, type MuscleGroup } from "@/lib/exercises";
+import { MUSCLE_GROUPS, type Metric, type MuscleGroup } from "@/lib/exercises";
+
+const METRICS: { value: Metric; label: string; hint: string }[] = [
+  { value: "weight", label: "Weighted", hint: "Logs the external weight you lift." },
+  { value: "bodyweight", label: "Bodyweight", hint: "Logs added weight only — 0 means just bodyweight." },
+  { value: "band", label: "Band", hint: "Logs a resistance level (Light → Heavy), no kg." },
+  { value: "time", label: "Timed", hint: "Logs seconds held — for stretches and planks." },
+];
 
 export function ExercisePicker({
   open,
@@ -25,7 +32,7 @@ export function ExercisePicker({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newGroup, setNewGroup] = useState<MuscleGroup>("Chest");
-  const [newBodyweight, setNewBodyweight] = useState(false);
+  const [newMetric, setNewMetric] = useState<Metric>("weight");
 
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
@@ -37,7 +44,7 @@ export function ExercisePicker({
     setQuery("");
     setCreating(false);
     setNewName("");
-    setNewBodyweight(false);
+    setNewMetric("weight");
   }
 
   function pick(id: string) {
@@ -49,7 +56,7 @@ export function ExercisePicker({
   function create() {
     const name = newName.trim();
     if (!name) return;
-    const id = addCustomExercise(name, newGroup, newBodyweight);
+    const id = addCustomExercise(name, newGroup, newMetric);
     pick(id);
   }
 
@@ -91,19 +98,26 @@ export function ExercisePicker({
             </div>
           </div>
           <div>
-            <p className="mb-1.5 text-sm font-medium text-ink-soft">Load type</p>
-            <Segmented
-              value={newBodyweight ? "bodyweight" : "weighted"}
-              onChange={(v) => setNewBodyweight(v === "bodyweight")}
-              options={[
-                { value: "weighted", label: "Weighted" },
-                { value: "bodyweight", label: "Bodyweight" },
-              ]}
-            />
+            <p className="mb-1.5 text-sm font-medium text-ink-soft">
+              How is it logged?
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {METRICS.map((m) => (
+                <button
+                  key={m.value}
+                  onClick={() => setNewMetric(m.value)}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    m.value === newMetric
+                      ? "bg-primary text-primary-ink"
+                      : "bg-surface-2 text-muted"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
             <p className="mt-1.5 text-xs text-muted">
-              {newBodyweight
-                ? "Logs added weight only — 0 means just bodyweight."
-                : "Logs the external weight you lift."}
+              {METRICS.find((m) => m.value === newMetric)?.hint}
             </p>
           </div>
           <div className="flex gap-2">

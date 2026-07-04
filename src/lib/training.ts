@@ -2,6 +2,16 @@
 
 export type IntensityMode = "rpe" | "rir";
 
+/** Resistance-band levels, light → heavy. Used for band-metric exercises. */
+export const BAND_LEVELS = [
+  "X-Light",
+  "Light",
+  "Medium",
+  "Heavy",
+  "X-Heavy",
+] as const;
+export type BandLevel = (typeof BAND_LEVELS)[number];
+
 /** RPE 10 = 0 RIR, RPE 9 = 1 RIR, … (RPE = 10 − RIR). */
 export const rirToRpe = (rir: number) => Math.max(0, Math.min(10, 10 - rir));
 export const rpeToRir = (rpe: number) => Math.max(0, 10 - rpe);

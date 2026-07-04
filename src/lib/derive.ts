@@ -1,6 +1,6 @@
 import { computeTargets, type Macros } from "./nutrition";
-import { EXERCISES, exerciseById } from "./exercises";
-import type { AppState, FoodEntry, Profile } from "./types";
+import { EXERCISES, exerciseById, type Metric } from "./exercises";
+import type { AppState, FoodEntry, Profile, Workout } from "./types";
 
 export interface ResolvedExercise {
   id: string;
@@ -8,7 +8,9 @@ export interface ResolvedExercise {
   group: string;
   compound: boolean;
   custom: boolean;
+  metric: Metric;
   bodyweight: boolean;
+  defaultSec?: number;
 }
 
 /** Seeded library + the user's custom exercises, unified. */
@@ -19,7 +21,9 @@ export function resolvedExercises(state: AppState): ResolvedExercise[] {
     group: e.group as string,
     compound: e.compound,
     custom: false,
-    bodyweight: e.load === "bodyweight",
+    metric: e.metric,
+    bodyweight: e.metric === "bodyweight",
+    defaultSec: e.defaultSec,
   }));
   const custom = state.customExercises.map((c) => ({
     id: c.id,
@@ -27,16 +31,28 @@ export function resolvedExercises(state: AppState): ResolvedExercise[] {
     group: c.group,
     compound: false,
     custom: true,
-    bodyweight: !!c.bodyweight,
+    metric: c.metric,
+    bodyweight: c.metric === "bodyweight",
+    defaultSec: c.metric === "time" ? 30 : undefined,
   }));
   return [...base, ...custom];
 }
 
+/** How a movement is logged (seeded or custom). Defaults to weight. */
+export function exerciseMetric(state: AppState, id: string): Metric {
+  const c = state.customExercises.find((x) => x.id === id);
+  if (c) return c.metric;
+  return exerciseById(id)?.metric ?? "weight";
+}
+
 /** Whether a movement is loaded by bodyweight (seeded or custom). */
 export function exerciseIsBodyweight(state: AppState, id: string): boolean {
-  const c = state.customExercises.find((x) => x.id === id);
-  if (c) return !!c.bodyweight;
-  return exerciseById(id)?.load === "bodyweight";
+  return exerciseMetric(state, id) === "bodyweight";
+}
+
+/** Default hold length (seconds) for a timed movement. */
+export function exerciseDefaultSec(state: AppState, id: string): number {
+  return exerciseById(id)?.defaultSec ?? 30;
 }
 
 /** Latest known bodyweight — most recent weigh-in, else the profile value. */
@@ -54,9 +70,26 @@ export function effectiveLoad(
   exerciseId: string,
   addedKg: number,
 ): number {
-  return exerciseIsBodyweight(state, exerciseId)
-    ? currentBodyweightKg(state) + addedKg
-    : addedKg;
+  switch (exerciseMetric(state, exerciseId)) {
+    case "bodyweight":
+      return currentBodyweightKg(state) + addedKg;
+    case "band":
+    case "time":
+      return 0; // no external kg — excluded from volume/e1RM
+    default:
+      return addedKg;
+  }
+}
+
+/** Total seconds spent on timed/mobility work in a workout. */
+export function workoutStretchSeconds(state: AppState, w: Workout): number {
+  return w.sets.reduce(
+    (a, s) =>
+      exerciseMetric(state, s.exerciseId) === "time"
+        ? a + (s.durationSec ?? 0)
+        : a,
+    0,
+  );
 }
 
 /** Resolve an exercise id (seeded or custom) to a display name. */

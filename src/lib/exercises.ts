@@ -6,22 +6,27 @@ export type MuscleGroup =
   | "Legs"
   | "Shoulders"
   | "Arms"
-  | "Core";
+  | "Core"
+  | "Mobility";
 
 /**
- * How the movement is loaded:
- * - "weighted": external load on a bar/machine/dumbbell (the number you enter IS the load).
+ * How a movement is measured when you log it:
+ * - "weight": external load on a bar/machine/dumbbell (the number you enter IS the load).
  * - "bodyweight": you are the load. The number you enter is ADDED weight
  *   (0 = pure bodyweight, positive = belt/plate, negative = band/machine assistance).
+ * - "band": resistance band — logged by a level label (Light/Medium/Heavy), not kg.
+ * - "time": held/timed movement (stretches, planks) — logged in seconds, not reps.
  */
-export type LoadType = "weighted" | "bodyweight";
+export type Metric = "weight" | "bodyweight" | "band" | "time";
 
 export interface Exercise {
   id: string;
   name: string;
   group: MuscleGroup;
   compound: boolean;
-  load: LoadType;
+  metric: Metric;
+  /** Default hold, for timed movements (seconds). */
+  defaultSec?: number;
 }
 
 const x = (
@@ -29,18 +34,30 @@ const x = (
   name: string,
   group: MuscleGroup,
   compound = false,
-  load: LoadType = "weighted",
+  metric: Metric = "weight",
 ): Exercise => ({
   id,
   name,
   group,
   compound,
-  load,
+  metric,
 });
 
 /** Same as `x` but flags the movement as bodyweight-loaded. */
 const bw = (id: string, name: string, group: MuscleGroup, compound = false): Exercise =>
   x(id, name, group, compound, "bodyweight");
+
+/** A resistance-band movement — logged by level label, no external kg. */
+const band = (id: string, name: string, group: MuscleGroup): Exercise =>
+  x(id, name, group, false, "band");
+
+/** A timed hold (stretch/mobility/plank) — logged in seconds. */
+const timed = (
+  id: string,
+  name: string,
+  group: MuscleGroup,
+  defaultSec = 30,
+): Exercise => ({ id, name, group, compound: false, metric: "time", defaultSec });
 
 export const EXERCISES: Exercise[] = [
   // Chest
@@ -93,7 +110,34 @@ export const EXERCISES: Exercise[] = [
   // Core
   bw("hanging-leg-raise", "Hanging Leg Raise", "Core"),
   x("cable-crunch", "Cable Crunch", "Core"),
-  bw("plank", "Plank", "Core"),
+  timed("plank", "Plank", "Core", 45),
+
+  // Bands / home gym — logged by resistance level
+  band("band-chest-press", "Band Chest Press", "Chest"),
+  band("band-pull-apart", "Band Pull-Apart", "Back"),
+  band("band-row", "Band Row", "Back"),
+  band("band-lat-pulldown", "Band Lat Pulldown", "Back"),
+  band("band-squat", "Band Squat", "Legs"),
+  band("band-glute-kickback", "Band Glute Kickback", "Legs"),
+  band("band-lateral-walk", "Band Lateral Walk", "Legs"),
+  band("band-shoulder-press", "Band Shoulder Press", "Shoulders"),
+  band("band-lateral-raise", "Band Lateral Raise", "Shoulders"),
+  band("band-face-pull", "Band Face Pull", "Shoulders"),
+  band("band-curl", "Band Curl", "Arms"),
+  band("band-pushdown", "Band Triceps Pushdown", "Arms"),
+
+  // Mobility / stretching — logged in seconds
+  timed("hamstring-stretch", "Hamstring Stretch", "Mobility", 30),
+  timed("hip-flexor-stretch", "Hip Flexor Stretch", "Mobility", 30),
+  timed("couch-stretch", "Couch Stretch", "Mobility", 45),
+  timed("pigeon-pose", "Pigeon Pose", "Mobility", 45),
+  timed("childs-pose", "Child's Pose", "Mobility", 30),
+  timed("thoracic-rotation", "Thoracic Rotation", "Mobility", 30),
+  timed("shoulder-cross-stretch", "Shoulder Cross-Body Stretch", "Mobility", 30),
+  timed("calf-stretch", "Calf Stretch", "Mobility", 30),
+  timed("cat-cow", "Cat-Cow", "Mobility", 30),
+  timed("worlds-greatest-stretch", "World's Greatest Stretch", "Mobility", 45),
+  timed("dead-hang", "Dead Hang", "Mobility", 30),
 ];
 
 export const MUSCLE_GROUPS: MuscleGroup[] = [
@@ -103,6 +147,7 @@ export const MUSCLE_GROUPS: MuscleGroup[] = [
   "Shoulders",
   "Arms",
   "Core",
+  "Mobility",
 ];
 
 const BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));
